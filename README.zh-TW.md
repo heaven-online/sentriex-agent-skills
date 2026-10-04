@@ -2,12 +2,34 @@
 
 提供 Claude Code 與 OpenAI Codex 使用的串接流程，包含 Public API 契約、CLI 操作、callback 驗簽與請求範例。
 
-第一個 CLI 版本發布後，可透過 Homebrew 安裝：
+第一個 CLI 版本發布後，可依作業系統安裝，不需要 Go 或 Node.js。
+
+## macOS 與 Linux
+
+透過 Homebrew 安裝：
 
 ```sh
 brew install heaven-online/tap/sentriex
 sentriex --version
 ```
+
+## Windows
+
+到[官方 Releases](https://github.com/heaven-online/sentriex-agent-skills/releases) 下載 `sentriex_v0.1.0_windows_amd64.zip`（x64）或 `sentriex_v0.1.0_windows_arm64.zip`（ARM64），以及 `checksums.txt`。用 `Get-FileHash -Algorithm SHA256` 計算 ZIP 的雜湊，與 `checksums.txt` 對應項目比對。
+
+x64 可在 PowerShell 解壓縮並執行：
+
+```powershell
+$sentriexZip = "$env:USERPROFILE\Downloads\sentriex_v0.1.0_windows_amd64.zip"
+$sentriexInstallDir = "$env:USERPROFILE\Tools\sentriex"
+Expand-Archive -Path $sentriexZip -DestinationPath $sentriexInstallDir -Force
+& "$sentriexInstallDir\sentriex.exe" --version
+$env:Path = "$sentriexInstallDir;$env:Path"
+```
+
+ARM64 請改用對應 ZIP 檔名。以上 `Path` 設定只適用於目前終端機；若要永久使用，可在 Windows「環境變數」將安裝資料夾加入使用者的 `Path`，再開新的終端機。也可以直接使用執行檔的完整路徑。
+
+## 安裝 Skill
 
 在自己的應用程式專案裡安裝 Skill：
 

@@ -6,12 +6,34 @@ An integration workflow for Claude Code and OpenAI Codex, with the merchant-faci
 
 ## Install
 
-Install the CLI from the official Homebrew tap after its first release is published:
+Install the CLI after its first release is published. Go and Node.js are not required.
+
+### macOS and Linux
+
+Use the official Homebrew tap:
 
 ```sh
 brew install heaven-online/tap/sentriex
 sentriex --version
 ```
+
+### Windows
+
+Download `sentriex_v0.1.0_windows_amd64.zip` (x64) or `sentriex_v0.1.0_windows_arm64.zip` (ARM64) and `checksums.txt` from the [official Releases](https://github.com/heaven-online/sentriex-agent-skills/releases). Compare the ZIP's `Get-FileHash -Algorithm SHA256` result with its entry in `checksums.txt`.
+
+For x64, extract and run in PowerShell:
+
+```powershell
+$sentriexZip = "$env:USERPROFILE\Downloads\sentriex_v0.1.0_windows_amd64.zip"
+$sentriexInstallDir = "$env:USERPROFILE\Tools\sentriex"
+Expand-Archive -Path $sentriexZip -DestinationPath $sentriexInstallDir -Force
+& "$sentriexInstallDir\sentriex.exe" --version
+$env:Path = "$sentriexInstallDir;$env:Path"
+```
+
+For ARM64, use the ARM64 ZIP name. The `Path` change applies to this terminal session; add the installation folder to your user `Path` in Windows Environment Variables for future terminals. Without a `Path` entry, call the executable by its full path.
+
+### Install the skill
 
 Inside your application repository, install the skill for your coding agent:
 

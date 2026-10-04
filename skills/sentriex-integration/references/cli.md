@@ -2,6 +2,25 @@
 
 Minimum CLI version: 0.1.0. Public API contract: 0.3.0.
 
+## Install the CLI
+
+After the first CLI release is published, macOS and Linux users can run `brew install heaven-online/tap/sentriex`.
+
+On Windows, download the x64 `sentriex_v0.1.0_windows_amd64.zip` or ARM64 `sentriex_v0.1.0_windows_arm64.zip` from the [official Releases](https://github.com/heaven-online/sentriex-agent-skills/releases). Verify the ZIP's SHA256 against the release's `checksums.txt`, then extract it. The ZIP contains `sentriex.exe` and dependency license notices; Go, Node.js, and Git are not needed to run it.
+
+Example for x64 in PowerShell:
+
+```powershell
+$sentriexZip = "$env:USERPROFILE\Downloads\sentriex_v0.1.0_windows_amd64.zip"
+Get-FileHash -Path $sentriexZip -Algorithm SHA256
+$sentriexInstallDir = "$env:USERPROFILE\Tools\sentriex"
+Expand-Archive -Path $sentriexZip -DestinationPath $sentriexInstallDir -Force
+& "$sentriexInstallDir\sentriex.exe" --version
+$env:Path = "$sentriexInstallDir;$env:Path"
+```
+
+Use the ARM64 filename on ARM64. Adding the folder to `Path` above affects only the current terminal; add it to the Windows user `Path` for future terminals. You can also invoke the executable by its full path. Install project skills from the developer's application directory.
+
 ## Configuration
 
 | Setting | Meaning |
@@ -12,6 +31,8 @@ Minimum CLI version: 0.1.0. Public API contract: 0.3.0.
 | `SENTRIEX_CALLBACK_SECRET` | Separate callback signing secret, used only for local callback verification |
 
 The business environment is selected by the API key, independently of the deployment host. CLI environment configuration checks that selection; it is not a scope field sent to the API.
+
+PowerShell uses `$env:SENTRIEX_BASE_URL` and `$env:SENTRIEX_ENVIRONMENT` to set these variables. Load `SENTRIEX_API_KEY` and callback secrets from the developer's local secret provider, without putting them in chat, scripts, or tracked files.
 
 ## Commands
 
@@ -32,6 +53,8 @@ sentriex callbacks verify --body callback.json --headers headers.json --signatur
 ```
 
 Use `--input -` to read an unchanged JSON body from stdin. Order creates send the original file bytes, including whitespace, and sign the same bytes. Input must be a JSON object of at most 1 MiB. Creates are not automatically retried. Redirects are not followed. Preserve the input and idempotency key for retries.
+
+On Windows, prefer `--input <file>` and UTF-8 JSON files without a BOM. Windows PowerShell 5.1's default redirection and text-writing commands can change encoding; do not pipe captured callback bodies through `Get-Content` or rewrite them before verification.
 
 `doctor` verifies configuration and public health only. It explicitly reports `authentication_verified: false`. A sandbox GET for an existing order verifies authentication; it does not verify permission to create orders or fund availability.
 
@@ -70,5 +93,7 @@ sentriex skills install --agent claude-code --ref <tag-or-commit> --force
 |---|---|---|
 | Claude Code | `.claude/skills/sentriex-integration` | `~/.claude/skills/sentriex-integration` |
 | Codex | `.agents/skills/sentriex-integration` | `~/.codex/skills/sentriex-integration` |
+
+On Windows, `~` is the user profile directory: user-wide skills go to `$env:USERPROFILE\.claude\skills\sentriex-integration` or `$env:USERPROFILE\.codex\skills\sentriex-integration`.
 
 The installer downloads only the named skill from the official public repository. It checks archive bounds and paths, stages a complete installation, and requires `--force` before replacing an existing directory. It never replaces a target symlink or file. `--ref` defaults to `main`; use a tag or commit when you need a fixed revision. Standard agent loading rules still apply; reopen the agent session if needed.
