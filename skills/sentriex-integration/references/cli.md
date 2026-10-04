@@ -34,6 +34,33 @@ The business environment is selected by the API key, independently of the deploy
 
 PowerShell uses `$env:SENTRIEX_BASE_URL` and `$env:SENTRIEX_ENVIRONMENT` to set these variables. Load `SENTRIEX_API_KEY` and callback secrets from the developer's local secret provider, without putting them in chat, scripts, or tracked files.
 
+## Request signing and API key parsing
+
+The full bearer token has the form `sk_test_<key_id>_<secret>` (sandbox) or `sk_live_<key_id>_<secret>` (production). Remove the known `sk_test_` or `sk_live_` prefix, then split the remainder at its **first** underscore. The first part is the key ID; preserve everything after that separator as the secret. For the synthetic token `sk_test_demo_test_secret`, the key ID is `demo` and the secret is `test_secret`.
+
+Use the **UTF-8 bytes of the secret text** as the HMAC-SHA256 key. Issued secrets can look hexadecimal; use those characters directly, without hex or base64 decoding. The complete token is still sent as `Authorization: Bearer <token>`.
+
+Hash the exact raw body bytes with SHA256, encode that digest as lowercase hexadecimal, and join these five fields with one LF byte (`\n`), with no extra trailing LF:
+
+1. Uppercase HTTP method.
+2. Request path and query, preserving URL encoding and query order.
+3. The timestamp header's decimal Unix-seconds text.
+4. The idempotency-key header's exact value (empty if absent).
+5. The lowercase body SHA256.
+
+HMAC the UTF-8 bytes of this canonical string and send `X-Sentriex-Signature: v1=<lowercase_hex_digest>`. Both create endpoints require the timestamp, signature, and idempotency key.
+
+### Fixed signature test vector
+
+The bundled [request-signature.json](../examples/request-signature.json) contains a synthetic token, raw body, canonical string, and independently calculated expected signature. It tests signing bytes; use the request templates for complete orders and a current timestamp for live requests.
+
+- Token: `sk_test_demo_test_secret`; HMAC secret text: `test_secret`.
+- Method: `POST`; path/query: `/v1/deposit-orders?trace=a%2Fb`.
+- Timestamp: `1700000000`; idempotency key: `retry-1`.
+- Raw body: `{"user_ref":"u_1","gross_amount":"1.250000"}` followed by **one LF byte**.
+- Body SHA256: `3bc37a4b2ae15eb4ec51ee536d16a1e425e7102b720bb60b3d0706a8627d20a0`.
+- Expected signature: `v1=ca9ed13c4107de77882e988768d042f95d8e9d35ba26d96ea7084b27dfb0e6b7`.
+
 ## Commands
 
 ```sh
@@ -67,6 +94,8 @@ Successful API calls return an envelope:
 ```
 
 The `data` object follows the bundled OpenAPI schema. Errors are JSON on stderr with `code`, `message`, and optional `status`, `request_id`, and `retry_after`. Known secrets are redacted.
+
+API error messages use Problem Details `detail`, then `title`, then the HTTP status text. If stdout cannot be written, the CLI emits `output_error` on stderr and exits 1; the operation may already have completed. For a create, retain the original body and idempotency key when checking or retrying its outcome.
 
 | Exit | Meaning |
 |---|---|

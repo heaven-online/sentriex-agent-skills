@@ -275,6 +275,14 @@ components:
         the Authorization header. sk_live_ selects the production
         environment, sk_test_ selects sandbox. API Key material supplied in
         query strings or request bodies is rejected with invalid_api_key.
+        A complete token is `sk_test_<key_id>_<secret>` or
+        `sk_live_<key_id>_<secret>`. To obtain the request HMAC secret,
+        remove the known `sk_test_` or `sk_live_` prefix, then split the
+        remainder at its first underscore: the first part is key_id and
+        everything after that separator is the secret component. Use the
+        UTF-8 bytes of that secret text as the HMAC key, even when it looks
+        hexadecimal; do not hex-decode or base64-decode it, and do not use
+        the complete bearer token as the HMAC key.
   parameters:
     IdempotencyKey:
       name: Idempotency-Key
@@ -309,13 +317,14 @@ components:
         Request signature in v1=<hex_hmac_sha256> format over the canonical
         string `METHOD + "\n" + path_and_query + "\n" + timestamp + "\n" +
         idempotency_key_or_empty + "\n" + sha256_hex(raw_body)`, keyed with
-        the API Key secret component. Missing signature metadata is rejected
+        the UTF-8 bytes of the API Key secret component defined in
+        components.securitySchemes.PublicApiKey. Missing signature metadata is rejected
         with missing_api_signature (even when Idempotency-Key is also
         missing); a mismatch is rejected with invalid_api_signature.
       schema:
         type: string
         pattern: '^v1=[0-9a-f]{64}$'
-        example: "v1=6f9b6a1f0e0d4c3b2a190807060504030201000f0e0d0c0b0a09080706050403"
+        example: "v1=ca9ed13c4107de77882e988768d042f95d8e9d35ba26d96ea7084b27dfb0e6b7"
     DepositOrderID:
       name: deposit_order_id
       in: path

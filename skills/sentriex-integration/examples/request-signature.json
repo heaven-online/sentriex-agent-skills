@@ -1,0 +1,12 @@
+{
+  "api_key": "sk_test_demo_test_secret",
+  "secret_component": "test_secret",
+  "method": "POST",
+  "path_and_query": "/v1/deposit-orders?trace=a%2Fb",
+  "timestamp": "1700000000",
+  "idempotency_key": "retry-1",
+  "raw_body": "{\"user_ref\":\"u_1\",\"gross_amount\":\"1.250000\"}\n",
+  "body_sha256": "3bc37a4b2ae15eb4ec51ee536d16a1e425e7102b720bb60b3d0706a8627d20a0",
+  "canonical_string": "POST\n/v1/deposit-orders?trace=a%2Fb\n1700000000\nretry-1\n3bc37a4b2ae15eb4ec51ee536d16a1e425e7102b720bb60b3d0706a8627d20a0",
+  "signature": "v1=ca9ed13c4107de77882e988768d042f95d8e9d35ba26d96ea7084b27dfb0e6b7"
+}
