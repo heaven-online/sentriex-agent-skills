@@ -1,0 +1,14 @@
+{
+  "api_version": "0.3.0",
+  "files": {
+    "README.md": "d2ef07d36325524a8b402808e4e24d0c364c1c168b786da98421abd16dc37111",
+    "README.zh-TW.md": "b1ca8439e57e11b2c137088de2e6e28602ae199fe2768a29294c42ce65772ea5",
+    "skills/sentriex-integration/SKILL.md": "0d7e030e68a9dc405d6c15e3ec4cdf7303937a5b31b96dede715446e80f2b0d9",
+    "skills/sentriex-integration/examples/deposit.json": "6dc083b284c73c6c6f516fd2bb01ce04dce2e2bfb8db09e953b1336f06300af1",
+    "skills/sentriex-integration/examples/withdrawal.json": "bd1e5860f4ad13ff11521a37e6a3d39d5d44cdb5933210e0da8daac9f4ce37fd",
+    "skills/sentriex-integration/references/callbacks.md": "3abe2a9b525f9a46283ddcc8edf355007e10422cb8a1128dfbe4feeb0beb5230",
+    "skills/sentriex-integration/references/cli.md": "261b975244e40b935c01a6da440c2ada2d4dcd11d095da04b6e7653d8fb4c3f9",
+    "skills/sentriex-integration/references/public-api.yaml": "ab514b1d68c449a23a291f24452408503813cb04b3b8d0415e263a0191715e99"
+  },
+  "schema_version": 1
+}

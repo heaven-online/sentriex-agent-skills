@@ -1,0 +1,1037 @@
+openapi: 3.0.3
+info:
+  title: Sentriex Public API
+  version: 0.3.0
+  license:
+    name: Proprietary
+  description: >-
+    Merchant-facing public API. Protected operations authenticate with a
+    platform-scoped API Key in the Authorization header; merchant, platform,
+    and environment context always derive from the key, never from request
+    bodies. State-changing requests additionally require a timestamped
+    HMAC-SHA256 request signature. Errors use RFC 9457 Problem Details with
+    stable machine-readable codes. All token amounts are decimal strings
+    paired with explicit asset context.
+servers:
+  - url: https://public-api.sentriex.local
+    description: Public API base URL
+security:
+  - PublicApiKey: []
+paths:
+  /healthz:
+    get:
+      operationId: getHealthz
+      summary: Public API health check
+      security: []
+      responses:
+        "200":
+          description: Service health status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "404":
+          description: Route not found
+  /v1/deposit-orders:
+    post:
+      operationId: postDepositOrders
+      summary: Create a deposit order
+      description: >-
+        Creates a deposit order (a collection request, not a chain
+        transaction) for the platform derived from the API Key. Requires
+        Idempotency-Key; replaying the same key with the same payload returns
+        the original response, while a different payload is rejected with
+        idempotency_key_reused. Those idempotency outcomes are resolved before
+        merchant and platform lifecycle admission; only a genuinely new order
+        is rejected, with merchant_disabled when the platform's merchant is
+        disabled (checked first, on every platform of the merchant) or with
+        platform_disabled when the platform is disabled, without allocating an
+        address or persisting an order. The request must carry
+        X-Sentriex-Timestamp and X-Sentriex-Signature; middleware verifies API
+        Key context, source IP policy, rate limit, timestamp window, and
+        signature before any application validation such as Idempotency-Key.
+        The signature is v1=<hex_hmac_sha256> over
+        `METHOD + "\n" + path_and_query + "\n" + timestamp + "\n" +
+        idempotency_key_or_empty + "\n" + sha256_hex(raw_body)` using the API
+        Key secret component. Fixed orders require gross_amount; open orders
+        must omit it. Bodies that include merchant, platform, or environment
+        scope fields are rejected with scope_field_not_allowed.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/SentriexTimestamp"
+        - $ref: "#/components/parameters/SentriexSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDepositOrderRequest"
+      responses:
+        "201":
+          description: >-
+            Deposit order created (or original response replayed for the same
+            Idempotency-Key and payload). Fixed orders include gross_amount;
+            open orders omit it. fee_amount and net_amount are never present
+            at creation because final accounting amounts exist only after
+            ledger crediting. expires_at is the creation time plus the
+            platform deposit order TTL (default 30 minutes).
+          headers:
+            X-Sentriex-Request-Id:
+              $ref: "#/components/headers/XSentriexRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositOrder"
+        "400":
+          $ref: "#/components/responses/BadRequestProblem"
+        "401":
+          $ref: "#/components/responses/UnauthorizedProblem"
+        "403":
+          $ref: "#/components/responses/ForbiddenProblem"
+        "409":
+          $ref: "#/components/responses/ConflictProblem"
+        "422":
+          $ref: "#/components/responses/UnprocessableProblem"
+        "429":
+          $ref: "#/components/responses/RateLimitedProblem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableProblem"
+  /v1/deposit-orders/{deposit_order_id}:
+    get:
+      operationId: getDepositOrder
+      summary: Retrieve a deposit order
+      description: >-
+        Returns the deposit order identified by deposit_order_id when it
+        belongs to the merchant and platform derived from the API Key.
+        Orders of other platforms or merchants return 404
+        deposit_order_not_found without revealing existence. A
+        pending_payment or detected order past its expires_at is reported
+        with status expired. fee_amount and net_amount appear only after the order is
+        credited, sourced from the ledger posting result.
+      parameters:
+        - $ref: "#/components/parameters/DepositOrderID"
+      responses:
+        "200":
+          description: Deposit order representation scoped to the caller's platform
+          headers:
+            X-Sentriex-Request-Id:
+              $ref: "#/components/headers/XSentriexRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositOrder"
+        "401":
+          $ref: "#/components/responses/UnauthorizedProblem"
+        "403":
+          $ref: "#/components/responses/ForbiddenProblem"
+        "404":
+          $ref: "#/components/responses/NotFoundProblem"
+        "429":
+          $ref: "#/components/responses/RateLimitedProblem"
+  /v1/cashier/deposit-orders/{deposit_order_id}:
+    get:
+      operationId: getCashierDepositOrder
+      summary: Retrieve a deposit order for the cashier page
+      security: []
+      description: >-
+        Unauthenticated lookup that powers the user-facing cashier payment
+        page. No API Key is required, so the environment cannot derive from a
+        key and the caller selects it with the env query parameter. The
+        response exposes only the minimal payment-facing fields and never
+        reveals merchant, platform, tenant, user, fee, callback, or metadata
+        context. An unknown identifier, or an order not present in the selected
+        environment, returns 404 deposit_order_not_found without revealing
+        existence. An env value other than production or sandbox is rejected
+        with invalid_environment.
+      parameters:
+        - $ref: "#/components/parameters/DepositOrderID"
+        - $ref: "#/components/parameters/CashierEnvironment"
+      responses:
+        "200":
+          description: Minimal cashier view of the deposit order.
+          headers:
+            X-Sentriex-Request-Id:
+              $ref: "#/components/headers/XSentriexRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashierDepositOrder"
+        "400":
+          $ref: "#/components/responses/InvalidEnvironmentProblem"
+        "404":
+          $ref: "#/components/responses/NotFoundProblem"
+        "429":
+          $ref: "#/components/responses/RateLimitedProblem"
+  /v1/withdrawal-orders:
+    post:
+      operationId: postWithdrawalOrders
+      summary: Create a withdrawal order
+      description: >-
+        Creates a withdrawal order (a payout request the merchant initiates
+        for its platform user, not a bare chain transfer) for the platform
+        derived from the API Key. Requires Idempotency-Key; replaying the
+        same key with the same payload returns the original withdrawal
+        order, including orders marked failed at creation, while a
+        different payload is rejected with idempotency_key_reused. The
+        idempotency outcomes are resolved before merchant and platform
+        lifecycle admission; only a genuinely new order is rejected, with
+        merchant_disabled when the platform's merchant is disabled (checked
+        first, on every platform of the merchant) or with platform_disabled
+        when the platform is disabled, without persisting an order or posting
+        the ledger.
+        The request must carry X-Sentriex-Timestamp and X-Sentriex-Signature;
+        middleware verifies API Key context, source IP policy, rate limit,
+        timestamp window, and signature before any application validation such
+        as Idempotency-Key. The signature is v1=<hex_hmac_sha256> over
+        `METHOD + "\n" + path_and_query + "\n" + timestamp + "\n" +
+        idempotency_key_or_empty + "\n" + sha256_hex(raw_body)` using the
+        API Key secret component. After validation, ledger withdrawal
+        posting runs synchronously before the response: success moves the
+        order to processing; insufficient_pool and fee_consumes_amount
+        persist the order as failed and respond 422. The Cobo Transfer of
+        net_amount is submitted asynchronously after the response. Bodies
+        that include merchant, platform, or environment scope fields are
+        rejected with scope_field_not_allowed.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/SentriexTimestamp"
+        - $ref: "#/components/parameters/SentriexSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWithdrawalOrderRequest"
+      responses:
+        "201":
+          description: >-
+            Withdrawal order created (or original withdrawal order replayed
+            for the same Idempotency-Key and payload, including orders
+            marked failed at creation). After successful synchronous ledger
+            posting the status is processing and fee_amount and net_amount
+            carry the ledger posting result, satisfying gross_amount =
+            fee_amount + net_amount.
+          headers:
+            X-Sentriex-Request-Id:
+              $ref: "#/components/headers/XSentriexRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalOrder"
+        "400":
+          $ref: "#/components/responses/BadRequestProblem"
+        "401":
+          $ref: "#/components/responses/UnauthorizedProblem"
+        "403":
+          $ref: "#/components/responses/ForbiddenProblem"
+        "409":
+          $ref: "#/components/responses/WithdrawalConflictProblem"
+        "422":
+          $ref: "#/components/responses/WithdrawalUnprocessableProblem"
+        "429":
+          $ref: "#/components/responses/RateLimitedProblem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableProblem"
+  /v1/withdrawal-orders/{withdrawal_order_id}:
+    get:
+      operationId: getWithdrawalOrder
+      summary: Retrieve a withdrawal order
+      description: >-
+        Returns the withdrawal order identified by withdrawal_order_id when
+        it belongs to the merchant and platform derived from the API Key.
+        Orders of other platforms or merchants return 404
+        withdrawal_order_not_found without revealing existence. fee_amount
+        and net_amount are null until synchronous ledger posting succeeds,
+        sourced from the ledger posting result. failure_code is present
+        only for failed and failed_reversal_pending orders.
+      parameters:
+        - $ref: "#/components/parameters/WithdrawalOrderID"
+      responses:
+        "200":
+          description: Withdrawal order representation scoped to the caller's platform
+          headers:
+            X-Sentriex-Request-Id:
+              $ref: "#/components/headers/XSentriexRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalOrder"
+        "401":
+          $ref: "#/components/responses/UnauthorizedProblem"
+        "403":
+          $ref: "#/components/responses/ForbiddenProblem"
+        "404":
+          $ref: "#/components/responses/WithdrawalNotFoundProblem"
+        "429":
+          $ref: "#/components/responses/RateLimitedProblem"
+components:
+  securitySchemes:
+    PublicApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: Sentriex API key
+      description: >-
+        Public API key in sk_live_ or sk_test_ format, accepted only through
+        the Authorization header. sk_live_ selects the production
+        environment, sk_test_ selects sandbox. API Key material supplied in
+        query strings or request bodies is rejected with invalid_api_key.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Caller-chosen key that makes the create operation idempotent, scoped
+        by merchant, platform, operation, and environment. A missing key is
+        rejected with missing_idempotency_key; reuse with a different payload
+        is rejected with idempotency_key_reused.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    SentriexTimestamp:
+      name: X-Sentriex-Timestamp
+      in: header
+      required: true
+      description: >-
+        Unix timestamp in seconds when the request was signed. Accepted only
+        within five minutes of server time; otherwise the request is
+        rejected with request_timestamp_out_of_window.
+      schema:
+        type: string
+        pattern: '^[0-9]+$'
+        example: "1783094400"
+    SentriexSignature:
+      name: X-Sentriex-Signature
+      in: header
+      required: true
+      description: >-
+        Request signature in v1=<hex_hmac_sha256> format over the canonical
+        string `METHOD + "\n" + path_and_query + "\n" + timestamp + "\n" +
+        idempotency_key_or_empty + "\n" + sha256_hex(raw_body)`, keyed with
+        the API Key secret component. Missing signature metadata is rejected
+        with missing_api_signature (even when Idempotency-Key is also
+        missing); a mismatch is rejected with invalid_api_signature.
+      schema:
+        type: string
+        pattern: '^v1=[0-9a-f]{64}$'
+        example: "v1=6f9b6a1f0e0d4c3b2a190807060504030201000f0e0d0c0b0a09080706050403"
+    DepositOrderID:
+      name: deposit_order_id
+      in: path
+      required: true
+      description: Stable deposit order identifier returned at creation.
+      schema:
+        type: string
+        example: dep_9f2b6c1d8e474a52
+    CashierEnvironment:
+      name: env
+      in: query
+      required: true
+      description: >-
+        Environment the deposit order lives in. The cashier page is
+        unauthenticated, so the environment cannot derive from an API Key and
+        must be supplied explicitly. Any value other than production or sandbox
+        is rejected with invalid_environment.
+      schema:
+        type: string
+        enum:
+          - production
+          - sandbox
+    WithdrawalOrderID:
+      name: withdrawal_order_id
+      in: path
+      required: true
+      description: Stable withdrawal order identifier returned at creation.
+      schema:
+        type: string
+        example: wd_9f2b6c1d8e474a52
+  headers:
+    XSentriexRequestId:
+      description: >-
+        Request identifier assigned by the platform. Error bodies repeat the
+        same value in request_id.
+      schema:
+        type: string
+        example: req_123
+    RetryAfter:
+      description: Seconds to wait before retrying the rate-limited request.
+      schema:
+        type: string
+        example: "30"
+  responses:
+    BadRequestProblem:
+      description: >-
+        Malformed request. Codes: missing_idempotency_key (create request
+        without Idempotency-Key), scope_field_not_allowed (body carries
+        merchant, platform, or environment scope fields), invalid_request
+        (malformed JSON or field validation failure).
+      headers:
+        X-Sentriex-Request-Id:
+          $ref: "#/components/headers/XSentriexRequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    InvalidEnvironmentProblem:
+      description: >-
+        Malformed request. Codes: invalid_environment (the env query parameter
+        is missing or is a value other than production or sandbox).
+      headers:
+        X-Sentriex-Request-Id:
+          $ref: "#/components/headers/XSentriexRequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnauthorizedProblem:
+      description: >-
+        Authentication failure before handler execution. Codes:
+        invalid_api_key (missing, malformed, unknown, or non-header API Key),
+        disabled_api_key, missing_api_signature (write request without
+        X-Sentriex-Timestamp or X-Sentriex-Signature; takes priority over
+        missing Idempotency-Key), invalid_api_signature (signature mismatch),
+        request_timestamp_out_of_window (timestamp outside the five-minute
+        window).
+      headers:
+        X-Sentriex-Request-Id:
+          $ref: "#/components/headers/XSentriexRequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ForbiddenProblem:
+      description: >-
+        Source IP policy failure before handler execution. Codes:
+        ip_not_allowed (request address outside the configured source IP
+        allowlist).
+      headers:
+        X-Sentriex-Request-Id:
+          $ref: "#/components/headers/XSentriexRequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFoundProblem:
+      description: >-
+        Resource not visible to the caller's platform scope. Codes:
+        deposit_order_not_found (unknown identifier, or an order that belongs
+        to another platform or merchant).
+      headers:
+        X-Sentriex-Request-Id:
+          $ref: "#/components/headers/XSentriexRequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ConflictProblem:
+      description: >-
+        Conflicting state. Codes: idempotency_key_reused (same
+        Idempotency-Key with a different payload), active_deposit_order_exists
+        (an active order already exists for the same platform, user_ref,
+        asset, address family, and amount mode / gross amount; expired orders
+        do not count as active), merchant_disabled (the authenticated
+        platform's merchant is disabled and admits no genuinely new deposit
+        order on any of its platforms; checked before platform_disabled),
+        platform_disabled (the authenticated platform does not admit a
+        genuinely new deposit order). For both lifecycle codes, existing
+        idempotent results and payload conflicts take precedence.
+      headers:
+        X-Sentriex-Request-Id:
+          $ref: "#/components/headers/XSentriexRequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnprocessableProblem:
+      description: >-
+        Validation failure that persists no order and allocates no address.
+        Codes: unsupported_asset (asset not registered), asset_disabled,
+        amount_below_minimum, amount_above_maximum, amount_precision_exceeded
+        (fixed gross_amount more precise than the registered asset decimals),
+        missing_gross_amount (amount_mode fixed without gross_amount),
+        unexpected_gross_amount (amount_mode open with gross_amount).
+      headers:
+        X-Sentriex-Request-Id:
+          $ref: "#/components/headers/XSentriexRequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    RateLimitedProblem:
+      description: >-
+        Rate limit exhausted for the environment, merchant, platform, API
+        Key, and route family. Codes: rate_limit_exceeded. Retry metadata is
+        provided in the Retry-After header.
+      headers:
+        X-Sentriex-Request-Id:
+          $ref: "#/components/headers/XSentriexRequestId"
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ServiceUnavailableProblem:
+      description: >-
+        The requested operation is unavailable for the API Key's environment
+        because that environment has no wallet provider configured: deposit
+        address creation cannot allocate an address, and withdrawal creation
+        has no worker able to pay out. Code: service_unavailable. No order is
+        persisted and no pool balance is debited; the caller may retry after
+        the environment's wallet provider is enabled.
+      headers:
+        X-Sentriex-Request-Id:
+          $ref: "#/components/headers/XSentriexRequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    WithdrawalNotFoundProblem:
+      description: >-
+        Resource not visible to the caller's platform scope. Codes:
+        withdrawal_order_not_found (unknown identifier, or an order that
+        belongs to another platform or merchant).
+      headers:
+        X-Sentriex-Request-Id:
+          $ref: "#/components/headers/XSentriexRequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    WithdrawalConflictProblem:
+      description: >-
+        Conflicting state. Codes: idempotency_key_reused (same
+        Idempotency-Key with a different payload; the key stays consumed by
+        the original withdrawal order, including orders that failed at
+        creation), merchant_disabled (the authenticated platform's merchant is
+        disabled and admits no genuinely new withdrawal order on any of its
+        platforms; checked before platform_disabled), platform_disabled (the
+        authenticated platform does not admit a genuinely new withdrawal
+        order). For both lifecycle codes, existing idempotent results and
+        payload conflicts take precedence.
+      headers:
+        X-Sentriex-Request-Id:
+          $ref: "#/components/headers/XSentriexRequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    WithdrawalUnprocessableProblem:
+      description: >-
+        Withdrawal validation or accounting failure. Validation codes
+        persist no order, post no ledger entries, and submit no transfer:
+        unsupported_asset (asset not registered), asset_disabled,
+        invalid_amount (gross_amount not a positive decimal string),
+        amount_precision_exceeded (gross_amount more precise than the
+        registered asset decimals), amount_below_minimum,
+        amount_above_maximum, invalid_destination_address (destination
+        address syntax invalid for the selected chain). Accounting codes
+        persist the withdrawal order as failed, consume the
+        Idempotency-Key, and submit no Cobo Transfer: insufficient_pool
+        (platform pool cannot cover gross_amount), fee_consumes_amount
+        (computed withdrawal fee greater than or equal to gross_amount).
+      headers:
+        X-Sentriex-Request-Id:
+          $ref: "#/components/headers/XSentriexRequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        service:
+          type: string
+          example: public-api
+    Problem:
+      type: object
+      description: >-
+        RFC 9457 Problem Details object for merchant-facing errors. The code
+        field is the stable machine-readable integration contract; clients
+        must not depend on localized human text. Problem responses never
+        include API Key tokens, secret components, bearer values, or request
+        signatures.
+      required:
+        - type
+        - title
+        - status
+        - code
+        - request_id
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI reference identifying the problem type.
+          example: "https://docs.sentriex.example/errors/unsupported_asset"
+        title:
+          type: string
+          description: Short human-readable summary of the problem type.
+          example: Unsupported asset
+        status:
+          type: integer
+          description: HTTP status code for this occurrence.
+          example: 422
+        code:
+          type: string
+          description: Stable machine-readable error code.
+          example: unsupported_asset
+        detail:
+          type: string
+          description: Non-localized detail for this occurrence.
+        request_id:
+          type: string
+          description: >-
+            Request identifier equal to the X-Sentriex-Request-Id response
+            header.
+          example: req_123
+    DecimalAmount:
+      type: string
+      description: >-
+        Token amount as a decimal string. The public API never represents
+        token amounts as JSON floating point numbers. Every amount is paired
+        with explicit asset context (chain and token).
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      example: "100"
+    Asset:
+      type: object
+      description: Explicit asset context that accompanies every token amount.
+      required:
+        - chain
+        - token
+      properties:
+        chain:
+          type: string
+          description: Chain identifier.
+          example: TRON
+        token:
+          type: string
+          description: Token symbol on the chain.
+          example: USDT
+    AmountMode:
+      type: string
+      description: >-
+        fixed orders carry a merchant-declared gross_amount that inbound
+        payments must match exactly; open orders accept the actual received
+        amount, validated against asset bounds at crediting time.
+      enum:
+        - fixed
+        - open
+    DepositOrderStatus:
+      type: string
+      description: >-
+        Lifecycle: pending_payment on creation; detected once an inbound
+        transaction is matched to the order and its block confirmations are
+        accumulating on chain; confirmed while a matched inbound transaction
+        is being posted to the ledger; credited after ledger posting
+        succeeds; expired when a pending_payment or detected order passes
+        expires_at (evaluated lazily, no callback); failed on terminal
+        failure with a machine-readable failure_code. confirmed orders do
+        not expire.
+      enum:
+        - pending_payment
+        - detected
+        - confirmed
+        - credited
+        - expired
+        - failed
+    CreateDepositOrderRequest:
+      type: object
+      description: >-
+        Merchant, platform, and environment scope always derive from the API
+        Key; bodies that carry scope fields (for example merchant_id,
+        platform_id, or environment) are rejected with
+        scope_field_not_allowed rather than ignored.
+      required:
+        - user_ref
+        - asset
+        - amount_mode
+      properties:
+        user_ref:
+          type: string
+          description: >-
+            Merchant-supplied end-user reference. Users have no Sentriex
+            account; this reference scopes address binding and ledger
+            attribution.
+          minLength: 1
+          maxLength: 255
+          example: u_1
+        asset:
+          $ref: "#/components/schemas/Asset"
+        amount_mode:
+          $ref: "#/components/schemas/AmountMode"
+        gross_amount:
+          allOf:
+            - $ref: "#/components/schemas/DecimalAmount"
+          description: >-
+            Required when amount_mode is fixed; must be omitted when
+            amount_mode is open. Validated against the registered asset's
+            precision, minimum, and maximum before any order is persisted or
+            address allocated.
+        merchant_reference:
+          type: string
+          description: Optional merchant-side correlation reference.
+          maxLength: 255
+          example: topup-777
+        locale:
+          type: string
+          description: >-
+            Optional BCP 47 locale carried into the cashier URL. When
+            omitted, the platform default locale or service default locale
+            applies.
+          example: zh-TW
+        metadata:
+          type: object
+          description: Optional free-form merchant metadata echoed on retrieval.
+          additionalProperties: true
+    DepositOrder:
+      type: object
+      description: >-
+        A deposit order is a collection request, not a chain transaction.
+        gross_amount is present for fixed orders (the requested amount) and,
+        once credited, reflects the ledger posting result; open orders omit
+        it until credited. fee_amount and net_amount are present only after
+        crediting, sourced from the ledger posting result. failure_code is
+        present only for failed orders.
+      required:
+        - deposit_order_id
+        - status
+        - user_ref
+        - asset
+        - amount_mode
+        - cashier_url
+        - payment_address
+        - created_at
+        - expires_at
+      properties:
+        deposit_order_id:
+          type: string
+          description: Stable deposit order identifier.
+          example: dep_9f2b6c1d8e474a52
+        status:
+          $ref: "#/components/schemas/DepositOrderStatus"
+        user_ref:
+          type: string
+          example: u_1
+        asset:
+          $ref: "#/components/schemas/Asset"
+        amount_mode:
+          $ref: "#/components/schemas/AmountMode"
+        gross_amount:
+          allOf:
+            - $ref: "#/components/schemas/DecimalAmount"
+          description: >-
+            Present for fixed orders; present for open orders only after
+            crediting, with the actual received amount from the ledger
+            posting result.
+        fee_amount:
+          allOf:
+            - $ref: "#/components/schemas/DecimalAmount"
+          description: Present only after crediting, from the ledger posting result.
+        net_amount:
+          allOf:
+            - $ref: "#/components/schemas/DecimalAmount"
+          description: Present only after crediting, from the ledger posting result.
+        merchant_reference:
+          type: string
+          description: Present when supplied at creation.
+          example: topup-777
+        locale:
+          type: string
+          description: Locale resolved for the cashier URL.
+          example: zh-TW
+        metadata:
+          type: object
+          description: Present when supplied at creation.
+          additionalProperties: true
+        cashier_url:
+          type: string
+          format: uri
+          description: User payment page URL carrying the resolved locale context.
+          example: "https://cashier.sentriex.example/pay/dep_9f2b6c1d8e474a52?locale=zh-TW"
+        payment_address:
+          type: string
+          description: >-
+            User deposit address bound by platform, user_ref, and address
+            family. EVM-compatible chains share one address; TRON uses a
+            separate binding.
+          example: TXYZa1b2c3d4e5f6g7h8i9j0
+        failure_code:
+          type: string
+          description: Machine-readable failure code, present only for failed orders.
+        created_at:
+          type: string
+          format: date-time
+          description: Creation time in RFC 3339 format.
+        expires_at:
+          type: string
+          format: date-time
+          description: >-
+            Creation time plus the platform deposit order TTL (default 30
+            minutes). Applies only to pending_payment and detected orders
+            and is evaluated lazily.
+    CashierDepositOrder:
+      type: object
+      description: >-
+        Minimal, unauthenticated view of a deposit order for the user-facing
+        cashier payment page. It carries only the fields the payer needs and
+        deliberately omits every merchant, platform, tenant, user, fee,
+        callback, and metadata field. gross_amount is present only for fixed
+        orders. confirmations and confirmations_required are present only
+        once an inbound transaction has claimed the order.
+      required:
+        - deposit_order_id
+        - status
+        - chain
+        - token
+        - amount_mode
+        - payment_address
+        - expires_at
+        - created_at
+        - locale
+      properties:
+        deposit_order_id:
+          type: string
+          description: Stable deposit order identifier.
+          example: dep_9f2b6c1d8e474a52
+        status:
+          $ref: "#/components/schemas/DepositOrderStatus"
+        chain:
+          type: string
+          description: Chain identifier for the payment asset.
+          example: TRON
+        token:
+          type: string
+          description: Token symbol on the chain.
+          example: USDT
+        amount_mode:
+          $ref: "#/components/schemas/AmountMode"
+        gross_amount:
+          allOf:
+            - $ref: "#/components/schemas/DecimalAmount"
+          description: >-
+            Present only for fixed orders as the exact amount the inbound
+            payment must match. Omitted for open orders.
+        payment_address:
+          type: string
+          description: User deposit address the payer sends funds to.
+          example: TXYZa1b2c3d4e5f6g7h8i9j0
+        expires_at:
+          type: string
+          format: date-time
+          description: >-
+            Creation time plus the platform deposit order TTL. Applies only to
+            pending_payment and detected orders and is evaluated lazily.
+        created_at:
+          type: string
+          format: date-time
+          description: Creation time in RFC 3339 format.
+        locale:
+          type: string
+          description: Locale resolved for the cashier page.
+          example: zh-TW
+        confirmations:
+          type: integer
+          minimum: 0
+          description: >-
+            Block confirmations the claiming inbound transaction has
+            accumulated. Present together with confirmations_required and
+            absent together with it; both are absent while no inbound
+            transaction has claimed the order.
+          example: 14
+        confirmations_required:
+          type: integer
+          minimum: 0
+          description: >-
+            Block confirmations the chain requires before the inbound
+            transaction is final. Present together with confirmations and
+            absent together with it; both are absent while no inbound
+            transaction has claimed the order.
+          example: 20
+    WithdrawalOrderStatus:
+      type: string
+      description: >-
+        Lifecycle: pending while an accepted order awaits synchronous
+        ledger posting (rarely observable because posting completes before
+        the create response); processing after ledger posting succeeds,
+        until the asynchronously submitted provider transfer reaches a
+        terminal state; completed on provider terminal success; failed
+        when the ledger rejects posting at creation, or after a terminal
+        provider failure is successfully reversed in the ledger;
+        failed_reversal_pending when the ledger reversal of a terminal
+        provider failure fails retryably and awaits operator recovery
+        before moving to failed. failed and failed_reversal_pending orders
+        carry a machine-readable failure_code.
+      enum:
+        - pending
+        - processing
+        - completed
+        - failed
+        - failed_reversal_pending
+    WithdrawalDestination:
+      type: object
+      description: >-
+        Merchant-supplied payout destination on the selected chain.
+        Address syntax is validated for the chain before any order is
+        persisted; an invalid address is rejected with
+        invalid_destination_address.
+      required:
+        - address
+      properties:
+        address:
+          type: string
+          description: Destination address on the selected chain.
+          minLength: 1
+          maxLength: 255
+          example: TXYZa1b2c3d4e5f6g7h8i9j0
+        tag_or_memo:
+          type: string
+          description: >-
+            Optional destination tag or memo for chains that require
+            additional routing context.
+          maxLength: 255
+          example: "100234"
+    CreateWithdrawalOrderRequest:
+      type: object
+      description: >-
+        Merchant, platform, and environment scope always derive from the API
+        Key; bodies that carry scope fields (for example merchant_id,
+        platform_id, or environment) are rejected with
+        scope_field_not_allowed rather than ignored.
+      required:
+        - user_ref
+        - asset
+        - gross_amount
+        - destination
+      properties:
+        user_ref:
+          type: string
+          description: >-
+            Merchant-supplied end-user reference. Users have no Sentriex
+            account; the merchant platform decides whether this user may
+            withdraw, while Sentriex enforces platform pool solvency and
+            request validity.
+          minLength: 1
+          maxLength: 255
+          example: u_1
+        asset:
+          $ref: "#/components/schemas/Asset"
+        gross_amount:
+          allOf:
+            - $ref: "#/components/schemas/DecimalAmount"
+          description: >-
+            Requested withdrawal amount as a decimal string. Validated
+            against the registered asset's precision, minimum, and maximum
+            before any order is persisted. The withdrawal fee is deducted
+            internally, so gross_amount = fee_amount + net_amount and
+            net_amount is the amount transferred on chain.
+        destination:
+          $ref: "#/components/schemas/WithdrawalDestination"
+        merchant_reference:
+          type: string
+          description: Optional merchant-side correlation reference.
+          maxLength: 255
+          example: wd-777
+        metadata:
+          type: object
+          description: Optional free-form merchant metadata echoed on retrieval.
+          additionalProperties: true
+        risk_metadata:
+          type: object
+          description: >-
+            Optional reserved risk metadata for future platform-side
+            review, stored and echoed on retrieval. v1 processes
+            withdrawals fully automatically and never blocks the transfer
+            on Sentriex-side approval.
+          additionalProperties: true
+    WithdrawalOrder:
+      type: object
+      description: >-
+        A withdrawal order is a payout request the merchant initiates for
+        its platform user, not a bare chain transfer. fee_amount and
+        net_amount are null until synchronous ledger posting succeeds; once
+        present they come from the ledger posting result and satisfy
+        gross_amount = fee_amount + net_amount, where net_amount is the
+        amount transferred on chain. failure_code is present only for
+        failed and failed_reversal_pending orders.
+      required:
+        - withdrawal_order_id
+        - status
+        - user_ref
+        - asset
+        - gross_amount
+        - destination
+        - created_at
+        - updated_at
+      properties:
+        withdrawal_order_id:
+          type: string
+          description: Stable withdrawal order identifier.
+          example: wd_9f2b6c1d8e474a52
+        status:
+          $ref: "#/components/schemas/WithdrawalOrderStatus"
+        user_ref:
+          type: string
+          example: u_1
+        asset:
+          $ref: "#/components/schemas/Asset"
+        gross_amount:
+          allOf:
+            - $ref: "#/components/schemas/DecimalAmount"
+          description: Requested withdrawal amount from creation.
+        fee_amount:
+          type: string
+          nullable: true
+          pattern: '^[0-9]+(\.[0-9]+)?$'
+          description: >-
+            Internally deducted withdrawal fee as a decimal string, from
+            the ledger posting result. null until synchronous ledger
+            posting succeeds. Never a JSON floating point number.
+          example: "2"
+        net_amount:
+          type: string
+          nullable: true
+          pattern: '^[0-9]+(\.[0-9]+)?$'
+          description: >-
+            Net payout amount transferred on chain as a decimal string,
+            from the ledger posting result. null until synchronous ledger
+            posting succeeds. Never a JSON floating point number.
+          example: "98"
+        destination:
+          $ref: "#/components/schemas/WithdrawalDestination"
+        merchant_reference:
+          type: string
+          description: Present when supplied at creation.
+          example: wd-777
+        metadata:
+          type: object
+          description: Present when supplied at creation.
+          additionalProperties: true
+        risk_metadata:
+          type: object
+          description: Present when supplied at creation.
+          additionalProperties: true
+        failure_code:
+          type: string
+          description: >-
+            Machine-readable failure code, present only for failed and
+            failed_reversal_pending orders. Examples: insufficient_pool,
+            fee_consumes_amount, provider_transfer_failed,
+            payout_rejected_before_submission (the payout was rejected
+            before any provider submission, so no funds left the platform).
+          example: insufficient_pool
+        created_at:
+          type: string
+          format: date-time
+          description: Creation time in RFC 3339 format.
+        updated_at:
+          type: string
+          format: date-time
+          description: Last status transition time in RFC 3339 format.

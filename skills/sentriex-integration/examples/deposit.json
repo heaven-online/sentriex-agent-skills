@@ -1,0 +1,7 @@
+{
+  "user_ref": "sandbox-user-example",
+  "asset": {"chain": "TRON", "token": "USDT"},
+  "amount_mode": "fixed",
+  "gross_amount": "10",
+  "merchant_reference": "sandbox-payment-example"
+}
