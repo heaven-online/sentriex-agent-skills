@@ -1,0 +1,7 @@
+{
+  "user_ref": "sandbox-user-example",
+  "asset": {"chain": "TRON", "token": "USDT"},
+  "gross_amount": "10",
+  "destination": {"address": "REPLACE_WITH_INTENDED_SANDBOX_ADDRESS"},
+  "merchant_reference": "sandbox-withdrawal-example"
+}
