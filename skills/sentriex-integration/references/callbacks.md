@@ -4,7 +4,7 @@ Merchant callbacks are separate from the platform's provider webhooks. Configure
 
 ## Envelope and events
 
-Every event carries `event_id`, `event_type`, `api_version` (`v1`), `created_at` (RFC 3339), and `data`.
+Every transaction event carries `event_id`, `event_type`, `api_version` (`v1`), `created_at` (RFC 3339), and `data`.
 
 | Event | Data |
 |---|---|
@@ -41,6 +41,12 @@ An example credited event:
 
 This illustration is not a signed test fixture; real signatures depend on the exact original bytes.
 
+## Test callbacks
+
+The merchant settings test sends `{"api_version":"v1","event_type":"callback.test","test":true}` without a body `event_id`. Only for this format with an absent `event_id`, use the nonempty `X-Sentriex-Event-Id` header as the event identity. Still verify the signature over the original body bytes and check timestamp freshness. If a body `event_id` is present, it must match the header; empty, null, and mismatched IDs are rejected. Transaction events must always include a matching body ID.
+
+After successful authentication, acknowledge the test with 2xx without applying payment or ledger changes. It checks callback connectivity and authentication, not a real transaction.
+
 ## Authentication
 
 Callback headers:
@@ -55,7 +61,7 @@ Calculate HMAC-SHA256 using the **callback secret**, with this canonical string:
 timestamp + "\n" + event_id + "\n" + sha256_hex(raw_body)
 ```
 
-Compare signatures in constant time, match the header event ID to the body's `event_id`, and validate freshness using the delivery timestamp header. The event's `created_at` is not the delivery timestamp: retries can deliver an older event with a fresh timestamp/signature.
+Compare signatures in constant time, match the header event ID to the body's `event_id` (except the test format described above), and validate freshness using the delivery timestamp header. The event's `created_at` is not the delivery timestamp: retries can deliver an older event with a fresh timestamp/signature.
 
 The CLI uses a five-minute window around the local clock. Synchronize the receiver's clock and use the same window in integration examples. Keep the original body bytes before your framework parses JSON; serializing the parsed object again may produce a different signature.
 

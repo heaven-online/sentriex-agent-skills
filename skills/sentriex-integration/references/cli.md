@@ -109,6 +109,8 @@ API error messages use Problem Details `detail`, then `title`, then the HTTP sta
 
 On 429, respect `retry_after`. On uncertain create outcomes, retain the same body/key. Handle `idempotency_key_reused`, `merchant_disabled`, `platform_disabled`, `invalid_api_signature`, `request_timestamp_out_of_window`, `insufficient_pool`, and other codes according to the contract. Do not infer safe retries merely from an HTTP status.
 
+The settings test callback (`api_version: "v1"`, `event_type: "callback.test"`, `test: true`) may omit the body `event_id`. The verifier then uses the required header event ID while still checking the raw-body signature and timestamp. If a body ID is present, it must match; transaction events always require a matching body ID. See the [callback guide](callbacks.md).
+
 ## Install/update the skill
 
 ```sh
