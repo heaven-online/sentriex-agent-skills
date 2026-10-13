@@ -19,12 +19,13 @@ sentriex --version
 
 ### Windows
 
-Download `sentriex_v0.1.0_windows_amd64.zip` (x64) or `sentriex_v0.1.0_windows_arm64.zip` (ARM64) and `checksums.txt` from the [official Releases](https://github.com/heaven-online/sentriex-agent-skills/releases). Compare the ZIP's `Get-FileHash -Algorithm SHA256` result with its entry in `checksums.txt`.
+Download `sentriex_<version>_windows_amd64.zip` (x64) or `sentriex_<version>_windows_arm64.zip` (ARM64) and `checksums.txt` from the [official Releases](https://github.com/heaven-online/sentriex-agent-skills/releases), where `<version>` is the release tag shown on the Releases page, such as `v0.2.0`. Compare the ZIP's `Get-FileHash -Algorithm SHA256` result with its entry in `checksums.txt`.
 
 For x64, extract and run in PowerShell:
 
 ```powershell
-$sentriexZip = "$env:USERPROFILE\Downloads\sentriex_v0.1.0_windows_amd64.zip"
+$sentriexVersion = "v0.2.0" # Replace with the version you downloaded
+$sentriexZip = "$env:USERPROFILE\Downloads\sentriex_${sentriexVersion}_windows_amd64.zip"
 $sentriexInstallDir = "$env:USERPROFILE\Tools\sentriex"
 Expand-Archive -Path $sentriexZip -DestinationPath $sentriexInstallDir -Force
 & "$sentriexInstallDir\sentriex.exe" --version
@@ -55,14 +56,24 @@ These commands target **Claude Code and Codex**. They do not install extensions 
 
 ## Start in sandbox
 
-Set `SENTRIEX_BASE_URL` to the actual Public API origin and supply your platform's `sk_test_` API key through `SENTRIEX_API_KEY`. Obtain these from your Sentriex onboarding contact and merchant settings. Do not put keys in prompts or tracked files.
+Run this once in your own terminal (on Windows, PowerShell or Windows Terminal):
+
+```sh
+sentriex configure
+```
+
+Press Enter at the base URL prompt to accept the default, `https://api.sentriex.io`, then paste your platform's `sk_test_` API key from merchant settings; the key is not echoed. The callback secret is optional and is used only to verify captured callbacks locally. The settings are saved for your user account in `~/.config/sentriex/config.json`; on macOS and Linux, only you can read the file. A coding agent cannot run this command for you; do not put keys in prompts or tracked files.
+
+Then check the configuration:
 
 ```sh
 sentriex doctor --json
 ```
 
+For CI or a temporary override, set `SENTRIEX_API_KEY`, `SENTRIEX_BASE_URL`, `SENTRIEX_ENVIRONMENT`, or `SENTRIEX_CALLBACK_SECRET` instead. Command flags take precedence over environment variables, which take precedence over the configuration file and the built-in default; `doctor` reports where each value came from.
+
 Ask your coding agent: "Use the Sentriex integration skill to implement sandbox deposits and signed callbacks in this application."
 
-Supported contract: Public API **0.3.0**. CLI minimum version: **0.1.0**. The API key selects merchant, platform, and sandbox/production scope; the host name does not select that business scope.
+Supported contract: Public API **0.3.0**. CLI minimum version: **0.2.0**. The API key selects merchant, platform, and sandbox/production scope; the host name does not select that business scope.
 
 The skill guides application code development. The CLI is a development and diagnostic tool, not a required subprocess for production application requests.

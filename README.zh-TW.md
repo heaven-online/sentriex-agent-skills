@@ -15,12 +15,13 @@ sentriex --version
 
 ## Windows
 
-到[官方 Releases](https://github.com/heaven-online/sentriex-agent-skills/releases) 下載 `sentriex_v0.1.0_windows_amd64.zip`（x64）或 `sentriex_v0.1.0_windows_arm64.zip`（ARM64），以及 `checksums.txt`。用 `Get-FileHash -Algorithm SHA256` 計算 ZIP 的雜湊，與 `checksums.txt` 對應項目比對。
+到[官方 Releases](https://github.com/heaven-online/sentriex-agent-skills/releases) 下載 `sentriex_<version>_windows_amd64.zip`（x64）或 `sentriex_<version>_windows_arm64.zip`（ARM64），以及 `checksums.txt`；`<version>` 是 Releases 頁面上的版本 tag，例如 `v0.2.0`。用 `Get-FileHash -Algorithm SHA256` 計算 ZIP 的雜湊，與 `checksums.txt` 對應項目比對。
 
 x64 可在 PowerShell 解壓縮並執行：
 
 ```powershell
-$sentriexZip = "$env:USERPROFILE\Downloads\sentriex_v0.1.0_windows_amd64.zip"
+$sentriexVersion = "v0.2.0" # 換成實際下載的版本
+$sentriexZip = "$env:USERPROFILE\Downloads\sentriex_${sentriexVersion}_windows_amd64.zip"
 $sentriexInstallDir = "$env:USERPROFILE\Tools\sentriex"
 Expand-Archive -Path $sentriexZip -DestinationPath $sentriexInstallDir -Force
 & "$sentriexInstallDir\sentriex.exe" --version
@@ -47,8 +48,24 @@ sentriex skills install --agent codex
 npx skills add heaven-online/sentriex-agent-skills --skill sentriex-integration
 ```
 
-設定 `SENTRIEX_BASE_URL` 為實際 Public API origin，並以環境變數 `SENTRIEX_API_KEY` 提供平台的 `sk_test_` 金鑰，再執行 `sentriex doctor --json`。金鑰應由安全的本機環境或 secret manager 載入，勿貼到對話或寫入 Git。
+## 從沙盒開始
+
+在自己的終端機執行一次（Windows 請使用 PowerShell 或 Windows Terminal）：
+
+```sh
+sentriex configure
+```
+
+base URL 提示直接按 Enter 採用預設值 `https://api.sentriex.io`，再貼上商戶後台取得的平台 `sk_test_` API key；輸入時不會顯示。callback secret 為選填，只用於在本機驗證擷取的 callback。設定會保存在目前使用者的 `~/.config/sentriex/config.json`，macOS 與 Linux 上僅本人可讀取。Agent 無法代為執行這個指令；金鑰勿貼到對話或寫入 Git。
+
+接著檢查設定：
+
+```sh
+sentriex doctor --json
+```
+
+CI 或臨時覆寫時，改用環境變數 `SENTRIEX_API_KEY`、`SENTRIEX_BASE_URL`、`SENTRIEX_ENVIRONMENT` 或 `SENTRIEX_CALLBACK_SECRET`。優先順序為指令參數、環境變數、設定檔，最後才是內建預設值；`doctor` 會顯示每個值的來源。
 
 接著告訴 Agent：「請使用 Sentriex 串接 Skill，協助這個應用程式實作沙盒入金及 callback 驗簽。」
 
-支援 Public API 0.3.0，CLI 最低版本 0.1.0。這裡的安裝目標是 Claude Code 與 Codex，不是一般 Claude 或 ChatGPT 聊天介面。
+支援 Public API 0.3.0，CLI 最低版本 0.2.0。這裡的安裝目標是 Claude Code 與 Codex，不是一般 Claude 或 ChatGPT 聊天介面。

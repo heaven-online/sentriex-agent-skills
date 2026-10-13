@@ -13,7 +13,7 @@ info:
     stable machine-readable codes. All token amounts are decimal strings
     paired with explicit asset context.
 servers:
-  - url: https://public-api.sentriex.local
+  - url: https://api.sentriex.io
     description: Public API base URL
 security:
   - PublicApiKey: []

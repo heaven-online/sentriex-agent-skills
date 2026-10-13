@@ -1,17 +1,18 @@
 # Sentriex CLI reference
 
-Minimum CLI version: 0.1.0. Public API contract: 0.3.0.
+Minimum CLI version: 0.2.0. Public API contract: 0.3.0.
 
 ## Install the CLI
 
 After the first CLI release is published, macOS and Linux users can run `brew install heaven-online/tap/sentriex`.
 
-On Windows, download the x64 `sentriex_v0.1.0_windows_amd64.zip` or ARM64 `sentriex_v0.1.0_windows_arm64.zip` from the [official Releases](https://github.com/heaven-online/sentriex-agent-skills/releases). Verify the ZIP's SHA256 against the release's `checksums.txt`, then extract it. The ZIP contains `sentriex.exe` and dependency license notices; Go, Node.js, and Git are not needed to run it.
+On Windows, download the x64 `sentriex_<version>_windows_amd64.zip` or ARM64 `sentriex_<version>_windows_arm64.zip` from the [official Releases](https://github.com/heaven-online/sentriex-agent-skills/releases), where `<version>` is the release tag shown on the Releases page, such as `v0.2.0`. Verify the ZIP's SHA256 against the release's `checksums.txt`, then extract it. The ZIP contains `sentriex.exe` and dependency license notices; Go, Node.js, and Git are not needed to run it.
 
 Example for x64 in PowerShell:
 
 ```powershell
-$sentriexZip = "$env:USERPROFILE\Downloads\sentriex_v0.1.0_windows_amd64.zip"
+$sentriexVersion = "v0.2.0" # Replace with the version you downloaded
+$sentriexZip = "$env:USERPROFILE\Downloads\sentriex_${sentriexVersion}_windows_amd64.zip"
 Get-FileHash -Path $sentriexZip -Algorithm SHA256
 $sentriexInstallDir = "$env:USERPROFILE\Tools\sentriex"
 Expand-Archive -Path $sentriexZip -DestinationPath $sentriexInstallDir -Force
@@ -23,16 +24,35 @@ Use the ARM64 filename on ARM64. Adding the folder to `Path` above affects only 
 
 ## Configuration
 
-| Setting | Meaning |
-|---|---|
-| `SENTRIEX_BASE_URL` / `--base-url` | Public API origin without a path; HTTPS, or HTTP loopback for local testing |
-| `SENTRIEX_API_KEY` | Platform-scoped bearer key; never pass as a command argument |
-| `SENTRIEX_ENVIRONMENT` / `--environment` | `sandbox` (default) or `production`; must match the key prefix |
-| `SENTRIEX_CALLBACK_SECRET` | Separate callback signing secret, used only for local callback verification |
+The developer runs `sentriex configure` once in their own terminal. It prompts on stderr for:
+
+1. `Public API base URL [https://api.sentriex.io]:` — press Enter to accept the default shown in brackets.
+2. `API key:` — paste the platform-scoped `sk_test_` or `sk_live_` key; input is not echoed.
+3. `Type production to confirm a live API key:` — asked only for a newly entered `sk_live_` key.
+4. `Callback secret (optional) [skip]:` — the separate callback signing secret; input is not echoed.
+
+When a value is already saved, its prompt shows it in brackets (secrets masked, such as `sk_test_…cret`) and Enter keeps it. Any invalid answer exits with code 2 without changing the file; run the command again. On success, stdout reports the file path, base URL, masked key, and environment as JSON.
+
+The configuration file is `~/.config/sentriex/config.json` on every operating system (`%USERPROFILE%\.config\sentriex\config.json` on Windows), or `$XDG_CONFIG_HOME/sentriex/config.json` when `XDG_CONFIG_HOME` is an absolute path. Secrets are stored in plain text: on macOS and Linux the `sentriex` directory is created with mode 0700 and the file with mode 0600; on Windows the file relies on the user profile's default permissions. `base_url` is saved only for a URL other than the built-in default, so a future default applies automatically.
+
+`sentriex configure` requires an interactive terminal and otherwise exits with `terminal_required`, so a coding agent or pipeline cannot run it. On Windows, Git Bash (mintty) is not a Windows console; run the command in PowerShell or Windows Terminal, or use environment variables.
+
+Each setting resolves from the first available source:
+
+| Setting | Flag | Environment variable | Configuration file | Default |
+|---|---|---|---|---|
+| Base URL | `--base-url` | `SENTRIEX_BASE_URL` | `base_url` | `https://api.sentriex.io` |
+| API key | none; never pass as a command argument | `SENTRIEX_API_KEY` | `api_key` | none |
+| Environment | `--environment` | `SENTRIEX_ENVIRONMENT` | `environment`, only when the API key also comes from the file | `sandbox` |
+| Callback secret | none | `SENTRIEX_CALLBACK_SECRET` | `callback_secret` | none |
+
+The base URL is the Public API origin without a path: HTTPS, or HTTP loopback for local testing. The environment must match the key prefix: `sk_test_` is sandbox and `sk_live_` is production. Use environment variables for CI and temporary overrides; a variable left in the shell overrides the configuration file. `sentriex doctor --json` reports `config_path`, `base_url`, the masked `api_key`, and `sources` for `base_url`, `api_key`, `environment`, and `callback_secret`, each `flag`, `env`, `config`, `default`, or `none`.
+
+Configuration failures exit with code 2: `invalid_config` (the file is not a valid JSON object; the message names its path), `terminal_required`, `invalid_base_url`, `invalid_api_key` (also when no source supplies a key), `production_not_confirmed`, `config_write_error`, and `missing_callback_secret` for `callbacks verify`.
 
 The business environment is selected by the API key, independently of the deployment host. CLI environment configuration checks that selection; it is not a scope field sent to the API.
 
-PowerShell uses `$env:SENTRIEX_BASE_URL` and `$env:SENTRIEX_ENVIRONMENT` to set these variables. Load `SENTRIEX_API_KEY` and callback secrets from the developer's local secret provider, without putting them in chat, scripts, or tracked files.
+In PowerShell, set the override variables with `$env:SENTRIEX_API_KEY`, `$env:SENTRIEX_BASE_URL`, and similar. Load keys and callback secrets from the developer's local secret provider, without putting them in chat, scripts, or tracked files.
 
 ## Request signing and API key parsing
 

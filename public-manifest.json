@@ -1,15 +1,15 @@
 {
   "api_version": "0.3.0",
   "files": {
-    "README.md": "42f33faaa75669b9d218fed2b5e295daafab6bc40a27190db866bd6d0853a799",
-    "README.zh-TW.md": "3b7ef6f2ac0afbec0cc37ef8f8a26a6f98ca4a2ffe6c6866d0cd7181549c894f",
-    "skills/sentriex-integration/SKILL.md": "a966241434d219df565f73316758620d2cf78c81039827c6510ca3912479a994",
+    "README.md": "2ef7ad6fb8eb1c187c04d6cc0da30987f3e3c40c71455051847358adb1e0dee7",
+    "README.zh-TW.md": "9842ac6ad035ef48269383842cdf2b44fab96875adada6b9ec1f9c3f1aad362b",
+    "skills/sentriex-integration/SKILL.md": "5e1a55c584f655df34ac390910c13e7aa726019f13c04d9aa7f8273fd2bc5bf0",
     "skills/sentriex-integration/examples/deposit.json": "6dc083b284c73c6c6f516fd2bb01ce04dce2e2bfb8db09e953b1336f06300af1",
     "skills/sentriex-integration/examples/request-signature.json": "f277fe57b885c78a1161880a76bc80dd891b151df0110ae39efc62ca597b5767",
     "skills/sentriex-integration/examples/withdrawal.json": "bd1e5860f4ad13ff11521a37e6a3d39d5d44cdb5933210e0da8daac9f4ce37fd",
     "skills/sentriex-integration/references/callbacks.md": "984d209cbad421eb6ef751e0aef9c231def2641e4be19083834a53c21a6f2f02",
-    "skills/sentriex-integration/references/cli.md": "26b4f864d3b7b944449845f3f175240ae04e5c9d02c2e79296ad8d78bf81f44e",
-    "skills/sentriex-integration/references/public-api.yaml": "e9f23a71f4285c41126714fe9a9adb8693d4ad23e84fbece0462dcb648377c98"
+    "skills/sentriex-integration/references/cli.md": "45d658ad18f0e4d42d6869799d953759b996f11c51c6039916d1ec2b6e01a1f5",
+    "skills/sentriex-integration/references/public-api.yaml": "e160916ea1f837e2f273d1ed987ecf465619f6ef6ec63161385b486a7b891f4c"
   },
   "schema_version": 1
 }
